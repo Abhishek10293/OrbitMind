@@ -9,7 +9,7 @@ export default function Home() {
   const router = useRouter();
 
   const handleOnClick = () => {
-    router.push('/sign-in');
+    router.push('/sign_in');
   }
 
 
