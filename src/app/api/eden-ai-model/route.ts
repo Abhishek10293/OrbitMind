@@ -1,16 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 
+// Define proper type for a chat message
+interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { provider, messages } = await req.json();
 
     // 🛡️ Clean invalid/empty messages
-    const cleanedMessages = (messages || []).filter(
-      (m: any) =>
-        m?.role &&
-        ["system", "user", "assistant"].includes(m.role) &&
-        typeof m.content === "string" &&
-        m.content.trim() !== ""
+    const cleanedMessages: ChatMessage[] = (messages || []).filter(
+      (m: unknown): m is ChatMessage =>
+        typeof m === "object" &&
+        m !== null &&
+        "role" in m &&
+        ["system", "user", "assistant"].includes((m as any).role) &&
+        "content" in m &&
+        typeof (m as any).content === "string" &&
+        (m as any).content.trim() !== ""
     );
 
     const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
@@ -29,10 +38,10 @@ export async function POST(req: NextRequest) {
     console.log("🔍 OpenRouter raw:", JSON.stringify(data, null, 2));
 
     // Extract assistant reply safely
-    const reply = data?.choices?.[0]?.message?.content || "⚠️ No response generated.";
+    const reply: string = data?.choices?.[0]?.message?.content || "⚠️ No response generated.";
 
     return NextResponse.json({ reply });
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("❌ Chat API error:", err);
     return NextResponse.json(
       { error: "Failed to fetch response" },
