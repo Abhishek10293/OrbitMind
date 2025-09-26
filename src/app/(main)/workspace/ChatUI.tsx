@@ -1,0 +1,214 @@
+"use client";
+
+import "highlight.js/styles/github-dark.css";
+import { Button } from "@/components/ui/button";
+import ReactMarkdown from "react-markdown";
+import EmptyChatState from "./EmptyChatState";
+import { Loader2Icon, Send } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { useContext, useEffect, useRef, useState } from "react";
+import { aiModelOptions } from "@/src/Services/AiModelOptions";
+import { AssistantContext } from "@/context/AssistantContext";
+import axios from "axios";
+import Image from "next/image";
+import { loadingMessages } from "@/src/Services/LoadingMessages";
+import { useMutation } from "convex/react";
+import { api } from "@/convex/_generated/api";
+import { AuthContext } from "@/context/authcontext";
+import { Id } from "@/convex/_generated/dataModel";
+import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
+import { ChatInputContext } from "@/context/ChatInputContext";
+import { MessageContext } from "@/context/MessageContext";
+import { toast } from "sonner";
+
+interface MessageType {
+  role: "user" | "assistant" | "system";
+  content: string;
+}
+
+function ChatUI() {
+  const { input, setInput } = useContext(ChatInputContext);
+  const { messages, setMessages } = useContext(MessageContext);
+  const [loading, setLoading] = useState<boolean>(false);
+  const chatRef = useRef<any>(null);
+
+  const { user, setUser } = useContext(AuthContext);
+  const { assistant } = useContext(AssistantContext);
+
+  useEffect(() => {
+    if (chatRef.current) {
+      chatRef.current.scrollTop = chatRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  useEffect(() => {
+    setMessages([]);
+  }, [assistant?.id]);
+
+  const updateToken = useMutation(api.users.UpdateTokens);
+
+  const getRandomLoadingMessage = (): string => {
+    return loadingMessages[Math.floor(Math.random() * loadingMessages.length)];
+  };
+
+  const handleOnSendMessage = async () => {
+    if (!input.trim()) return;
+
+    if (user?.credits! <= 0) {
+      toast("😔 Your Free Tokens Are Expired , Switch To Premium Mode!");
+      return;
+    }
+
+    const userInput = input;
+    setInput("");
+    setLoading(true);
+
+    const AiModel = aiModelOptions.find(
+      (item) => item.model === assistant.aiModelId
+    );
+
+    const userMessage = { role: "user" as const, content: userInput };
+    const loadingMessage = {
+      role: "assistant" as const,
+      content: getRandomLoadingMessage(),
+    };
+
+    setMessages((prev) => [...prev, userMessage, loadingMessage]);
+
+    try {
+      const recentMessages = [...messages, userMessage].slice(-6);
+
+      const systemMessage = assistant?.instruction
+        ? [{ role: "system" as const, content: assistant.instruction }]
+        : [];
+
+      const payloadMessages = [...systemMessage, ...recentMessages];
+
+      const res = await axios.post("/api/eden-ai-model", {
+        provider: AiModel?.model,
+        messages: payloadMessages,
+      });
+
+      setMessages((prev) => [
+        ...prev.slice(0, -1),
+        { role: "assistant", content: res.data.reply },
+      ]);
+
+      updateUserToken(res.data.reply);
+    } catch (err: any) {
+      const msg = err?.response?.data?.error;
+      const errorMsg =
+        msg?.includes("free limit is exhausted")
+          ? msg
+          : "Something went wrong.";
+      setMessages((prev) => [
+        ...prev.slice(0, -1),
+        { role: "assistant", content: errorMsg },
+      ]);
+      console.error("Request failed:", err?.response?.data || err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateUserToken = async (response: string) => {
+    const tokenCount = response.trim() ? response.trim().split(/\s+/).length : 0;
+
+    const result = await updateToken({
+      credits: Number(user?.credits) - tokenCount,
+      uid: user?._id as Id<"users">,
+    });
+
+    if (user) {
+      setUser({
+        ...user,
+        credits: Number(user?.credits) - tokenCount,
+      });
+    }
+  };
+
+  return (
+    <div className="p-6 flex flex-col h-full">
+      {/* Chat messages */}
+      {messages?.length === 0 ? (
+        <EmptyChatState />
+      ) : (
+        <div
+          ref={chatRef}
+          className="flex-1 overflow-y-auto scrollbar-hide space-y-4 mb-4"
+        >
+          {messages?.map((msg, index) => (
+            <div
+              key={index}
+              className={`flex ${
+                msg.role === "assistant" ? "justify-start" : "justify-end"
+              }`}
+            >
+              <div className="flex gap-3 items-start max-w-2xl">
+                {msg.role === "assistant" && assistant?.image && (
+                  <Image
+                    src={assistant.image}
+                    alt="assistant"
+                    width={40}
+                    height={40}
+                    className="rounded-full object-cover h-[30px] w-[30px]"
+                  />
+                )}
+                <div
+                  className={`mt-1 p-3 whitespace-pre-wrap break-words w-full overflow-hidden ${
+                    msg.role === "user"
+                      ? "bg-gray-50 text-black rounded-2xl dark:text-white dark:bg-[#4c4b4b]"
+                      : "bg-gray-50 text-black rounded-lg dark:bg-secondary dark:text-white/90"
+                  }`}
+                >
+                  {loading && index === messages?.length - 1 ? (
+                    <div className="flex items-center gap-2">
+                      <Loader2Icon className="animate-spin w-4 h-4 text-gray-500" />
+                      <span>{msg.content}</span>
+                    </div>
+                  ) : (
+                    <div className="markdown-body break-words">
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        rehypePlugins={[rehypeHighlight]}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Input area */}
+      <div className="flex items-center p-4 gap-3 w-full bg-slate-100 dark:bg-[#454549] rounded-3xl border-2 border-gray-300 dark:border-gray-600 shadow-md">
+        <Textarea
+          className="border-none focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none !text-lg resize-none dark:bg-[#454549]"
+          placeholder="Ask anything..."
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          disabled={loading}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              handleOnSendMessage();
+            }
+          }}
+        />
+        <Button
+          className="rounded-full p-3 flex-shrink-0"
+          onClick={handleOnSendMessage}
+          disabled={loading}
+        >
+          <Send />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export default ChatUI;

@@ -1,0 +1,56 @@
+*{
+  margin:0
+}
+.head1{
+  display:flex;
+  justify-content:space-between;
+  background-color: red;
+  height:10vh;
+  align-items:center;
+
+}
+.left{
+  padding-left: 1rem;
+  color:white;
+  
+}
+.right{
+  padding-right:1rem;
+
+ 
+  
+}
+.right button{
+  margin-left:1rem;
+  color:white;
+  background-color: red;
+  border: none;
+  font-size: large;
+  cursor: pointer;
+
+}
+.head2{
+  height:8vh;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  background-color:lightgray;
+  gap:1rem;
+}
+.inp{
+  width:400px;
+  height:30px;
+  padding-left:0.5rem;
+  border-radius: 0.5rem;
+  border:none;
+}
+.head2 button{
+  background-color: red;
+  color:white;
+  border:none;
+  height:35px;
+  width:80px;
+  border-radius: 0.5rem;
+  
+}
+
